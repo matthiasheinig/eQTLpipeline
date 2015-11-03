@@ -1,0 +1,530 @@
+## matrix eQTL expects matrices:
+## - genotypes   snp x sample
+## - expression  gene x sample
+## - covariates  covar x sample
+
+eqtl <- function(expression_file_name, genotype_file_name, covariates_file_name, gene.position, snp.pos, prefix, redo=FALSE, threshold=1e-5, compute.all=FALSE, what="table") {
+  require(MatrixEQTL)
+  require(data.table)
+  
+  # we use this check sum to store intermediate results
+  if (compute.all) {
+    eqtl.file = paste(prefix, "_eQTL_results_R.txt", sep="")
+  } else {
+    eqtl.file = paste(prefix, "_eQTL_results_R_significant.txt", sep="")
+  }
+  if (file.exists(eqtl.file) && !redo) {
+    eqtl = fread(eqtl.file, sep="\t", stringsAsFactors=F)
+    return(eqtl)
+  }
+  
+  dir.create(dirname(prefix), recursive=T)
+ 
+    
+  # compute eqtl
+  useModel = modelLINEAR ; # modelANOVA, modelLINEAR, or modelLINEAR_CROSS
+
+  # Only associations significant at this level will be saved
+  if (compute.all) {
+    pvOutputThreshold_cis = 1
+  } else {
+    pvOutputThreshold_cis = threshold
+  }
+  
+  pvOutputThreshold_tra = 0 # only look at cis eqtl
+  
+  errorCovariance = numeric()
+  # errorCovariance = read.table("Sample_Data/errorCovariance.txt")
+  cisDist = 1e6
+
+  # load the expression data for matrix eqtl
+  gene = SlicedData$new();
+  gene$fileDelimiter = "\t"; # the TAB character
+  gene$fileOmitCharacters = "NA"; # denote missing values;
+  gene$fileSkipRows = 1; # one row of column labels
+  gene$fileSkipColumns = 1; # one column of row labels
+  gene$fileSliceSize = 2000; # read file in pieces of 2,000 rows
+  gene$LoadFile(expression_file_name );
+
+ 
+
+  # load the covariate data for matrix eqtl
+  cvrt = SlicedData$new();
+  cvrt$fileDelimiter = "\t"; # the TAB character
+  cvrt$fileOmitCharacters = "NA"; # denote missing values;
+  cvrt$fileSkipRows = 1; # one row of column labels
+  cvrt$fileSkipColumns = 1; # one column of row labels
+  cvrt$fileSliceSize = 2000; # read file in one piece
+  if(length(covariates_file_name)>0) {
+    cvrt$LoadFile(covariates_file_name);
+  }  
+  
+
+  ## Load genotype data
+      
+  snps = SlicedData$new();
+  snps$fileDelimiter = "\t"; # the TAB character
+  snps$fileOmitCharacters = "NA"; # denote missing values;
+  snps$fileSkipRows = 1   ; # one row of column labels
+  snps$fileSkipColumns = 1; # one col of snp ids
+  snps$fileSliceSize = 2000; # read file in pieces of 2,000 rows
+  snps$LoadFile(genotype_file_name);
+      
+  ## Run the analysis
+  me = Matrix_eQTL_main(
+    snps = snps,
+    gene = gene,
+    cvrt = cvrt,
+    output_file_name = "",
+    pvOutputThreshold = pvOutputThreshold_tra,
+    useModel = useModel,
+    errorCovariance = errorCovariance,
+    verbose = TRUE,
+    output_file_name.cis = eqtl.file,
+    pvOutputThreshold.cis = pvOutputThreshold_cis,
+    snpspos = snp.pos[,1:3],
+    genepos = gene.position[,1:4],
+    cisDist = cisDist,
+    pvalue.hist = "qqplot",
+    min.pv.by.genesnp=(what != "table"));
+
+  pdf(file=paste(prefix, "_qqplot.pdf", sep=""))
+  plot(me)
+  dev.off()
+
+  if (what == "table") {
+    eqtl = fread(eqtl.file, sep="\t", stringsAsFactors=F)
+
+    ## add information about the snp position to the eqtl data
+    eqtl = cbind(eqtl, snp.pos[match(eqtl$SNP, snp.pos[,"snp_id"]),-1], gene.position[match(eqtl$gene, gene.position[,1]),-1])
+    eqtl = eqtl[order(eqtl$chrom, eqtl$snp_pos, eqtl$gene),]
+    write.table(eqtl, eqtl.file, sep="\t", row.names=F, quote=F)
+    
+    ## also create a filtered version
+    if (compute.all) {
+      significant = eqtl[eqtl[["p-value"]] < threshold,]
+      sig.file = gsub("_eQTL_results_R.txt$", "_eQTL_results_R_significant.txt", eqtl.file)
+      write.table(significant, sig.file, sep="\t", row.names=F, quote=F)
+    }
+    return(invisible(eqtl))
+  } else {
+    return(me)
+  }
+}
+
+
+
+## they use min(p) per gene as the test statistic
+## then they permute phenotypes to derive the null distribution
+## they run 1000 permutations for all genes
+## the exit criterion is > 15 permuted min(p) > actual min(p)
+
+eqtl.run <- function(expr, covar, genotype_file_name, gene.position, snp.pos, id, ...) {
+
+  ## prepare the input files
+  outdir = tempfile(pattern=id)
+  cat("creating temp dir for eqtl run", outdir, "\n")
+  dir.create(outdir)
+
+  prefix = file.path(outdir, id)
+  expr.file = paste(prefix, "_expression.txt", sep="")
+  write.table(expr, file=expr.file, sep="\t", quote=F)
+  
+  if (!is.null(covar)) {
+    covar.file = paste(prefix, "_covariates.txt", sep="")
+    write.table(covar, file=covar.file, sep="\t", quote=F)
+  } else {
+    covar.file = NULL
+  }
+
+  ## run the eqtl analysis
+  eqtls = eqtl(expr.file, genotype_file_name, covar.file, gene.position, snp.pos, prefix, ...)
+
+  return(eqtls)
+}
+
+
+eqtl.min.p <- function(expr, ...) {
+
+  ## report the min(p) for each gene
+  eqtls = eqtl.run(expr, ..., what="object")
+  min.p = eqtls$cis$min.pv.gene
+
+  ## make sure the order is the same as the input expression matrix
+  min.p = min.p[rownames(expr)]
+  
+  return(min.p)
+}
+
+
+## there is some strange behaviour when waiting for jobs (database locked)
+## so we need to make it extra failsafe
+myWaitForJobs <- function(reg, waittime=3, nretry=100) {
+  success = FALSE
+  while (nretry > 0 && !success) {
+    status = tryCatch({
+      while (TRUE) {
+        status = showStatus(reg)
+        if (status$done + status$expired == status$n) {
+          cat("done\n")
+          return(list(success=TRUE, nretry=nretry))
+        }
+        Sys.sleep(waittime)
+      }
+      return(list(success=FALSE, nretry=nretry))
+    }, error=function(e) {
+      cat("Error while waiting for jobs:\n")
+      print(e)
+      cat("\nnumber of retries left: ", nretry - 1, "\n")
+      Sys.sleep(waittime + runif(1, 0, 3))
+      return(list(success=FALSE, nretry=nretry - 1))
+    })
+    success = status$success
+    nretry = status$nretry
+    cat("success after the tryCatch block:", success, "\n")
+    cat("nretry after the tryCatch block:", nretry, "\n")
+  }
+  
+
+  if (!success) {
+    err.msg = paste("Error during batch processing in registry")
+    save(envir=sys.frame(), list=ls(envir=sys.frame()), file=file.path(dir, "error_image.RData"))
+    stop(err.msg)
+  }
+}
+
+
+## try to optimize the reduce function. probably the copying of arguments
+## takes too much time, so we put everything in one function
+## the main function body is copied from BatchJobs but the callback function
+## is directly integrated
+
+myReduceResults <- function (reg, ids, part = NA_character_,  impute.val, progressbar = TRUE, actual.pvalue, gene) {
+    require(checkmate)
+    BatchJobs:::checkRegistry(reg)
+    BatchJobs:::syncRegistry(reg)
+    if (missing(ids)) {
+        ids = done = BatchJobs:::dbFindDone(reg)
+        with.impute = FALSE
+    }
+    else {
+        ids = BatchJobs:::checkIds(reg, ids)
+        done = BatchJobs:::dbFindDone(reg, ids)
+        with.impute = !missing(impute.val)
+        if (!with.impute) {
+            if (length(ids) > length(done)) 
+                stopf("No results available for jobs with ids: %s", 
+                  collapse(setdiff(ids, done)))
+        }
+    }
+    assertFlag(progressbar)
+
+    init = rep(0, length(actual.pvalue))
+    aggr = init
+    
+    n = length(ids)
+    BatchJobs:::info("Reducing ", n, " results...")
+    if (n == 0L) {
+        if (missing(init)) 
+            return(NULL)
+        return(init)
+    }
+    bar = BatchJobs:::getProgressBar(progressbar, max = n, label = "reduceResults")
+    ## we removed the tryCatch block
+    for (id in ids) {
+      ## here we place the code that would usually go to the callback
+      ## function
+      res = BatchJobs:::getResult(reg, id, part)
+      
+      ## res is the min(p) per gene
+      minp = res[gene]
+      
+      aggr = aggr + as.numeric(minp <= actual.pvalue)
+      
+      bar$inc(1L)
+    }
+    
+    return(aggr)
+}
+
+
+
+## use BatchJobs to run permutations
+find.eGenes <- function(expr, covar, gene.position, snp.pos, genotype_file_name, dir, min.perm=1000, max.perm=10000, seed=0, exit.criterion=15, actual.min.p=NULL) {
+  require(BatchJobs)
+  ## initilaize the random generator
+  set.seed(seed)
+  
+  ## check if we need to determine the actual min.p
+  if (is.null(actual.min.p)) {
+    actual.min.p = eqtl.min.p(expr, covar, genotype_file_name, gene.position, snp.pos, "actual")
+  }
+  
+  
+  ## submit batches of min.perm permutation runs to the cluster
+  ## evaluate which genes go to the next round
+  
+  rfun <- function(pcount, new.order, expr, covar, genotype_file_name, gene.position, snp.pos) {
+    source("R/eqtl_lib.R")
+    id = paste("permutation", pcount, "___", sep="")
+
+    o = new.order[pcount,]
+    pexpr = expr[,o]
+    pcovar = covar[,o]
+    colnames(pexpr) = colnames(expr)
+    colnames(pcovar) = colnames(covar)
+
+    min.p = eqtl.min.p(pexpr, pcovar, genotype_file_name, gene.position, snp.pos, id)
+    return(min.p)
+  }
+
+  
+  genes.to.permute = 1:nrow(expr)
+  pcount = 0
+  count = rep(0, nrow(expr))
+  nperm.per.gene = rep(0, nrow(expr))
+  
+  while (pcount < max.perm && length(genes.to.permute) > 0) {
+
+    cat("\n\n\n\npermutation run", pcount, "analysing", length(genes.to.permute), "genes\n")
+    
+    ## permute sample labels
+    new.order = t(sapply(1:min.perm, function(i) sample(1:ncol(expr), ncol(expr))))
+
+    ## submit jobs
+    rdir = file.path(dir, "batchjobs")
+    reg = makeRegistry(id="permutations", seed=seed, file.dir=rdir, packages=c("MatrixEQTL", "data.table"))
+
+    resources = list(memory="8G", queue="standard", time="4:00:00", longrun="False")
+    more.args = list(new.order=new.order, expr=expr[genes.to.permute,,drop=F], covar=covar, genotype_file_name=genotype_file_name, gene.position=gene.position, snp.pos=snp.pos)
+    
+    batchMap(reg, rfun, 1:min.perm, more.args=more.args)
+    
+    submitJobs(reg, resources=resources, job.delay=function(n, i) runif(1, 0, 0.5))
+
+    ## there is a problem with concurrent acess to the sqlite database
+    ## so we need to wrap this in a loop with a number of retries
+    myWaitForJobs(reg, waittime=30, nretry=100)
+    
+    
+    ## reduce matrix is concatenating results row wise
+    min.p = reduceResultsMatrix(reg)
+    
+    ## remove the registry
+    system(paste("rm -rf", rdir))
+
+    ## count for each gene how many times the permuted minp was smaller
+    smaller = min.p <= rep(actual.min.p[genes.to.permute], each=nrow(min.p))
+    count[genes.to.permute] = count[genes.to.permute] + colSums(smaller)
+
+    ## increment the counter
+    pcount = pcount + min.perm
+
+    ## remember for each gene how many permutations were done
+    nperm.per.gene[genes.to.permute] = pcount
+
+    ## check which genes need to go to the next round
+    genes.to.permute = which(count < exit.criterion)
+    save(envir=sys.frame(), list=ls(envir=sys.frame()), file=file.path(dir, "current_image.RData"))
+  }
+
+  ## return the results
+  tab = data.frame(actual.min.p, count, nperm.per.gene, empirical.p=count/nperm.per.gene)
+  return(tab)
+}
+
+
+
+find.eSNPs <- function(expr, covar, gene.position, snp.pos, genotype_file_name, dir, threshold, min.perm=1000, max.perm=10000, seed=0, exit.criterion=15, actual.eqtls=NULL, blocksize=10) {
+
+  ## as input we need the permutation threshold which is the empirical min(p)
+  ## that corresponds to the FDR threshold across genes
+
+  ## then we compute gene wise nominal p-values that correspond to the
+  ## empirical threshold
+  
+  require(BatchJobs)
+  ## initilaize the random generator
+  set.seed(seed)
+  
+  ## check if we need to determine the actual min.p
+  if (is.null(actual.eqtls)) {
+    actual.eqtls= eqtl.run(expr, covar, genotype_file_name, gene.position, snp.pos, "actual")
+  }
+  
+  
+  ## submit batches of min.perm permutation runs to the cluster
+  ## evaluate which genes go to the next round
+  
+  rfun <- function(pcount, new.order, expr, covar, genotype_file_name, gene.position, snp.pos) {
+    source("R/eqtl_lib.R")
+    id = paste("permutation", pcount, "___", sep="")
+
+    o = new.order[pcount,]
+    pexpr = expr[,o]
+    pcovar = covar[,o]
+    colnames(pexpr) = colnames(expr)
+    colnames(pcovar) = colnames(covar)
+
+    min.p = eqtl.min.p(pexpr, pcovar, genotype_file_name, gene.position, snp.pos, id)
+    return(min.p)
+  }
+
+
+  ## we do not load all min.perm vectors at once
+  ## instead we will aggregate by counting if the permuted min(p) value
+  ## for a gene was smaller than the actual p value of a pair
+  
+  afun <- function(aggr, job, res, actual.pvalue, gene) {
+    
+    ## from the BatchJobs man package (reduceResults)
+    ## Here, 'job' is the
+    ## current job descriptor (see 'Job'), 'result' is the current
+    ## result object and 'aggr' are the so far aggregated results.
+    ## When using 'reduceResults', your function should add the
+    ## stuff you want to have from 'job' and 'result' to 'aggr' and
+    ## return that
+
+    ## res is the min(p) per gene
+    minp = res[gene]
+    
+    ## aggr is just the sum of permutations that was smaller
+    aggr = aggr + as.numeric(minp <= actual.pvalue)
+
+    return(aggr)
+  }
+  
+  pairs.to.permute = 1:nrow(actual.eqtls)
+  genes.to.permute = 1:nrow(expr)
+  pcount = 0
+  count = rep(0, nrow(actual.eqtls))
+  nperm.per.gene = rep(0, nrow(actual.eqtls))
+  
+  while (pcount < max.perm && length(genes.to.permute) > 0) {
+
+    cat("\n\n\n\npermutation run", pcount, "analysing", length(genes.to.permute), "genes\n")
+    
+    ## permute sample labels
+    new.order = t(sapply(1:min.perm, function(i) sample(1:ncol(expr), ncol(expr))))
+
+    ## submit jobs
+    rdir = file.path(dir, "batchjobs")
+    reg = makeRegistry(id="permutations", seed=seed, file.dir=rdir, packages=c("MatrixEQTL", "data.table"))
+
+    resources = list(memory="8G", queue="standard", time="4:00:00", longrun="False")
+    more.args = list(new.order=new.order, expr=expr[genes.to.permute,,drop=F], covar=covar, genotype_file_name=genotype_file_name, gene.position=gene.position, snp.pos=snp.pos)
+    
+    batchMap(reg, rfun, 1:min.perm, more.args=more.args)
+    
+    submitJobs(reg, resources=resources, job.delay=function(n, i) runif(1, 0, 0.5))
+
+    ## there is a problem with concurrent acess to the sqlite database
+    ## so we need to wrap this in a loop with a number of retries
+    myWaitForJobs(reg, waittime=30, nretry=100)
+    
+
+    ## somehow reducing results one by one is very slow, so we do it block
+    ## wise not to waste too much memory
+
+    gene = actual.eqtls[pairs.to.permute, "gene"]
+    actual.pvalue = actual.eqtls[pairs.to.permute, "p-value"]
+
+    ## reshape to the size of the block
+    actual.pvalue = matrix(rep(actual.pvalue, each=blocksize), nrow=blocksize)
+
+    ids = findDone(reg)
+    nsuccess = length(ids)
+    while (length(ids) > 0) {
+      ## get the block of results
+      min.p = reduceResultsMatrix(reg, ids=head(ids, blocksize), progressbar=FALSE)
+
+      ## reshape to the size of the eqtl results
+      min.p = min.p[,gene,drop=F]
+
+      ## check if the block is of full size
+      if (nrow(min.p) < blocksize) {
+        ## if not reduce the size of the actual pvalues matrix
+        actual.pvalue = actual.pvalue[1:nrow(min.p),]
+      }
+      
+      ## count
+      smaller = min.p <= actual.pvalue
+      count[pairs.to.permute] = count[pairs.to.permute] + colSums(smaller)
+
+      ## remove the job ids that were just processed
+      ids = tail(ids, -blocksize)
+    }
+    
+    ## remove the registry
+    system(paste("rm -rf", rdir))
+    
+    ## increment the counter
+    pcount = pcount + nsuccess
+
+    ## remember for each gene how many permutations were done
+    nperm.per.gene[genes.to.permute] = pcount
+
+    ## check which genes need to go to the next round
+    pairs.to.permute = which(count < exit.criterion)
+    genes.to.permute = which(rownames(expr) %in% actual.eqtls[pairs.to.permute,"gene"])
+    
+    save(envir=sys.frame(1), list=ls(envir=sys.frame(1)), file=file.path(dir, "current_image.RData"))
+  }
+
+  ## return the results
+  nperm.per.gene = nperm.per.gene[match(actual.eqtls[,"gene"], rownames(expr))]
+  tab = data.frame(as.data.frame(actual.eqtls), count, nperm.per.gene, empirical.p=count/nperm.per.gene)
+  return(tab)
+}
+
+
+
+#' Get egenes from a esnp table
+#'
+#' @param esnps an esnps table obtained from \code{\link{find.esnps}}
+#' @return a table of egenes with columns for
+#'   \list{min(p)
+get.egenes.from.esnps <- function(esnps, fdr=0.05) {
+  require(qvalue)
+  
+  ## get the gene wise min(p)
+  min.p = tapply(1:nrow(esnps), esnps[,"gene"], function(idx) idx[which.min(esnps[idx,"p.value"])])
+  egenes = esnps[min.p,c("gene", "p.value", "chrom", "start", "end", "gene_name", "gene_type", "count", "nperm.per.gene", "empirical.p")]
+  
+  ## compute the fdr from the empirical p values
+  qval = qvalue(egenes[,"empirical.p"])
+  egenes = cbind(egenes, qvalue=qval$qvalues)
+
+  max.p = max(egenes[egenes[,"qvalue"] < fdr, "empirical.p"])
+  
+  ## determine the gene specific p value threshold that corresponds to an fdr 5%
+  threshold = tapply(1:nrow(esnps), esnps[,"gene"], function(idx) {
+    sig = idx[esnps[idx,"empirical.p"] < max.p]
+    return(max(c(0, egenes[sig, "p.value"])))
+  })
+  
+  egenes = cbind(egenes, gene.specific.threshold=threshold[egenes[,"gene"]])
+  return(egenes)
+}
+
+
+qquniform <- function(p) {
+  p = sort(p)
+  expected = (1:length(p)) / length(p)
+  plot(-log10(expected), -log10(p))
+}
+
+
+get.peer.factors <- function(k, expr, covar) {
+  require(peer)
+  model = PEER()
+  PEER_setPhenoMean(model, t(expr))
+  PEER_setNk(model, k)
+  if (!is.null(covar)) {
+    PEER_setCovariates(model, as.matrix(covar))
+  }
+  PEER_update(model)
+  factors = PEER_getX(model)
+  weights = PEER_getW(model)
+  return(factors)
+}
