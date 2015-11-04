@@ -1,10 +1,9 @@
 Package: eQTLpipeline
-Title: What the Package Does (one line, title case)
-Version: 0.0.0.9000
-Authors@R: person("First", "Last", email = "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-Depends:
-    R (>= 3.2.1)
+Title: A package to facilitate the full pipeline of cis eQTL analysis
+Version: 0.1
+Authors@R: person("Matthias", "Heinig", email = "first.last@helmholtz-muenchen.de", role = c("aut", "cre"))
+Description: A package to facilitate the full pipeline of cis eQTL analysis including permutations on a HPC cluster supported by BatchJobs
+Depends: MatrixEQTL (>= 2.1.1), data.table, BatchJobs, R (>= 3.2.1)
 License: What license is it under?
 LazyData: true
 RoxygenNote: 5.0.0

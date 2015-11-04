@@ -50,7 +50,7 @@ Run eQTL permutation analysis using BatchJobs to distribute jobs on a HPC.
 This function uses \code{\link{eqtl.run}} function.
 }
 \references{
-GTEx Consortium, Ardlie, K. G., Wright, F. A., & Dermitzakis, E. T. (2015). The Genotype-Tissue Expression (GTEx) pilot analysis: multitissue gene regulation in humans. Science, 348(6235), 648<U+2013>660. \link{\url{http://doi.org/10.1126/science.1262110}}
+GTEx Consortium, Ardlie, K. G., Wright, F. A., & Dermitzakis, E. T. (2015). The Genotype-Tissue Expression (GTEx) pilot analysis: multitissue gene regulation in humans. Science, 348(6235), 648<U+2013>660. \url{http://doi.org/10.1126/science.1262110}
 }
 \seealso{
 Other eqtl HPC functions: \code{\link{find.eGenes}},

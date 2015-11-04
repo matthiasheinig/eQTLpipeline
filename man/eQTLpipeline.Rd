@@ -20,7 +20,7 @@ LazyLoad: \tab yes\cr
 }
 }
 \examples{
-insertexample()
+#insertexample()
 }
 \keyword{package}
 

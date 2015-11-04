@@ -17,9 +17,11 @@
 #' @docType package
 #' @references 
 #' @keywords package
-#' @import MatrixEQTL, data.table, BatchJobs
+#' @import MatrixEQTL
+#' @import data.table
+#' @import BatchJobs
 #' @examples
-#' insertexample()
+#' #insertexample()
 NULL
 
 
@@ -305,7 +307,7 @@ myWaitForJobs <- function(reg, waittime=3, nretry=100) {
 #' @param actual.min.p if the actual minimal P-value per gene has already been
 #'        computed it can be passed
 #' @return a table with minimal P-values per gene and the empirical P-values
-#' @references GTEx Consortium, Ardlie, K. G., Wright, F. A., & Dermitzakis, E. T. (2015). The Genotype-Tissue Expression (GTEx) pilot analysis: multitissue gene regulation in humans. Science, 348(6235), 648–660. \link{\url{http://doi.org/10.1126/science.1262110}}
+#' @references GTEx Consortium, Ardlie, K. G., Wright, F. A., & Dermitzakis, E. T. (2015). The Genotype-Tissue Expression (GTEx) pilot analysis: multitissue gene regulation in humans. Science, 348(6235), 648–660. \url{http://doi.org/10.1126/science.1262110}
 #' @export
 find.eGenes <- function(expr, covar, gene.position, snp.pos, genotype_file_name, dir, min.perm=1000, max.perm=10000, seed=0, exit.criterion=15, actual.min.p=NULL) {
   require(BatchJobs)
@@ -418,7 +420,7 @@ find.eGenes <- function(expr, covar, gene.position, snp.pos, genotype_file_name,
 #'        permutation runs are collected in the same block, the faster, but
 #'        also more memory consuming.
 #' @return a table with eQTL P-values and the empirical P-values for eSNPs
-#' @references GTEx Consortium, Ardlie, K. G., Wright, F. A., & Dermitzakis, E. T. (2015). The Genotype-Tissue Expression (GTEx) pilot analysis: multitissue gene regulation in humans. Science, 348(6235), 648–660. \link{\url{http://doi.org/10.1126/science.1262110}}
+#' @references GTEx Consortium, Ardlie, K. G., Wright, F. A., & Dermitzakis, E. T. (2015). The Genotype-Tissue Expression (GTEx) pilot analysis: multitissue gene regulation in humans. Science, 348(6235), 648–660. \url{http://doi.org/10.1126/science.1262110}
 #' @export
 find.eSNPs <- function(expr, covar, gene.position, snp.pos, genotype_file_name, dir, threshold, min.perm=1000, max.perm=10000, seed=0, exit.criterion=15, actual.eqtls=NULL, blocksize=10) {
 
@@ -623,4 +625,25 @@ get.peer.factors <- function(k, expr, covar) {
   factors = PEER_getX(model)
   weights = PEER_getW(model)
   return(factors)
+}
+
+
+#' Quantile normalization
+#'
+#' @param x ngenes x nsamples matrix to be normalized
+#' @return quantile normalized matrix
+#' @export
+normalize.quantile <- function(x) {
+  x = as.matrix(x)
+  o = apply(x, 2, order)
+  xsort = x
+  for (col in 1:ncol(x)) {
+    xsort[,col] = x[o[,col], col]
+  }
+  means = apply(xsort, 1, mean)
+  normalized = matrix(NA, nrow=nrow(x), ncol=ncol(x), dimnames=dimnames(x))
+  for (col in 1:ncol(x)) {
+    normalized[o[,col], col] = means
+  }
+  return(normalized)
 }
