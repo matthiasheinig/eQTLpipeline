@@ -11,10 +11,10 @@ install.packages("devtools")
 then update it to the latest developement version:
 
 ```R
-devtools::install_github("devtools")
+devtools::install_github("hadley/devtools")
 ```
 
-Finally you can install the latest development version of tRap from github with:
+Finally you can install the latest development version of eQTLpipeline from github with:
 
 ```R
 devtools::install_github("matthiasheinig/eQTLpipeline")
