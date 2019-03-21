@@ -208,6 +208,297 @@ eqtl.run <- function(expr, covar, genotype_file_name, gene.position, snp.pos, id
   return(eqtls)
 }
 
+#' Interface to the MatrixEQTL Matrix_eQTL_engine()
+#' This is a simplified version for more general (trans)QTL analyses,
+#' e.g. GWAS or metaboliteQTL and does not need
+#'
+#' @family eqtl functions
+#' @title transQTL interface
+#' @param expression_file_name filename of a tab separated file with expression
+#'        values in a matrix ngene x nsample
+#' @param genotype_file_name filename of a tab separated file with genotype
+#'        dosage values (usually between 0 and 2) in a matrix nsnp x nsample
+#' @param vcf is the genotype file a vcf file that needs to be converted?
+#'        (default FALSE)
+#' @param covariates_file_name filename of a tab separated file with covariate
+#'        values in a matrix ncovar x nsample
+#' @param snp.pos data.frame with SNP positions in the first three columns
+#'        named "snp_id", "chrom", "snp_pos" or TRUE if vcf=TRUE
+#' @param prefix name prefix for the outputfilenames        
+#' @param threshold significance threshold for eQTLs (default 1e-5)
+#' @param verbose print comments of progress (default TRUE)
+#' 
+#' Parameters /options I would like to add:
+#' @param save.memory prevent FDR correction (default FALSE)
+#'        https://github.com/andreyshabalin/MatrixEQTL/issues/8 
+#' @param threshold.cis
+#' @param threshold.trans
+#'
+#' Parameters/options in the old wrapper that do not work currently:
+#' @param gene.position data.frame with gene positions in the first 4 columns
+#'        named "gene_id", "chrom", "start", "end"
+#' @param redo logical, if TRUE the results will always be recomputed, if FALSE
+#'        the results will be loaded if they exist (default FALSE)
+#' @param compute.all MatrixEQTL reports only significant results, if results
+#'        for all tests are required set this to TRUE (default FALSE)
+#' @param what flag to determine what should be returned (default "table"). Can
+#'        be set to "object" to get the MatrixEQTL result object.
+#' @return if what is "table" the function returns the eQTL results as a table
+#'         if what is "object" the function returns the MatrixEQTL object.
+#' @author Ines Assum (2019-03-21)
+#' @references
+#' @export
+trans.qtl <- function(prefix,
+                      genotype_file_name,
+                      vcf=FALSE,
+                      snp.pos=NULL,
+                      expression_file_name,
+                      covariates_file_name=character(),
+                      threshold=1e-5,
+                      verbose=TRUE,
+                      save.memory=FALSE,
+                      gene.position=NULL, redo=FALSE, compute.all=FALSE, what="table") {
+
+  
+  # for debug purposes:
+  if(F){
+    setwd("~/Documents/Lehre/gitlab_systems_genetics_exercise/2019")
+    threshold <- 1
+    # threshold.cis=1
+    # threshold.trans=1
+    save.memory <- FALSE
+    verbose <- TRUE
+    prefix <- "../data/20190303/matrixEQTL/egeuv1_risk_filtered"
+    genotype_file_name <- "../data/20190303/filtered.vcf.bgz"
+    vcf <- TRUE
+    snp.pos <- TRUE
+    
+    egeuv1_2 <- readRDS("../data/20190303/plink/egeuv_risk_filtered_gwaa.data.RDS")
+    phenos <- phdata(egeuv1_2)
+    genes <- c("ENSG00000109787", "ENSG00000241163")
+    expr <- data.frame(t(phenos[, c("SCORESUM", "ENSG00000109787.8", "ENSG00000241163.1")]),
+                       stringsAsFactors = F)
+    expression_file_name <- expr
+    covariates_file_name <- character()
+
+  }
+    
+
+
+  # libraries:
+  require(MatrixEQTL)
+  require(data.table)
+  if(vcf){
+    require(dplyr)
+    require(VariantAnnotation)
+    require(snpStats)
+  }
+  
+  ## Location of the package with the data files.
+  base.dir = prefix;
+  
+  # data prep
+
+  if(vcf){
+    vcf.file <- readVcf(genotype_file_name)
+    geno.file <- paste0(prefix, "_SNP.txt")
+    gt.mat <- t(as(genotypeToSnpMatrix(vcf.file)$genotype, "numeric")) %>% as.data.frame
+    write.table(cbind(snpid=rownames(gt.mat), gt.mat),
+                row.names = F, col.names = T, quote = F, sep = "\t",
+                file = geno.file)
+    if(verbose){
+      print("Created genotype file from .vcf file at:")
+      print(geno.file)
+    }
+    genotype_file_name <- geno.file
+    if(isTRUE(snp.pos)){
+      snp.pos <- rowRanges(vcf.file)
+      snp.pos <- data.frame(snpid=names(snp.pos),
+                            chr=as.numeric(as.character(seqnames(snp.pos))),
+                            pos=start(snp.pos),
+                            stringsAsFactors = F)
+      if(verbose){
+        print("SNP annotations extracted from the .vcf file.")
+      }
+    }
+  }
+  if(is.data.frame(snp.pos)){
+    if(verbose){
+      print("SNP position annotation will be added to the results in the end.")
+    }
+  }
+  if(is.data.frame(expression_file_name)){
+    expr.file <- paste0(prefix, "_gene.txt")
+    write.table(cbind(geneid=rownames(expression_file_name), expression_file_name),
+                row.names = F, col.names = T, quote = F, sep = "\t",
+                file = expr.file)
+    if(verbose){
+      print(paste0("Created expression file for ",
+                   dim(expression_file_name)[1], " genes by ",
+                   dim(expression_file_name)[2], " individuals at:"))
+      print(expr.file)
+    }
+    expression_file_name <- expr.file
+  }
+  if(is.data.frame(covariates_file_name)){
+    cov.file <- paste0(prefix, "_covariates.txt")
+    write.table(cbind(covs=rownames(covariates_file_name), covariates_file_name),
+                row.names = F, col.names = T, quote = F, sep = "\t",
+                file = cov.file)
+    if(verbose){
+      print(paste0("Created covariates file for ",
+                   dim(covariates_file_name)[1], " covariates by ",
+                   dim(covariates_file_name)[2], " individuals at:"))
+      print(cov.file)
+    }
+    covariates_file_name <- cov.file
+  } else if (length(covariates_file_name)>0) {
+    if(verbose){
+      print("No covariates used in this analysis")
+    }
+  }
+
+  ## Settings
+  
+  # Linear model to use, modelANOVA, modelLINEAR, or modelLINEAR_CROSS
+  useModel = modelLINEAR; # modelANOVA, modelLINEAR, or modelLINEAR_CROSS
+  
+  # Output file name
+  if (save.memory){
+    output_file_name = paste0(prefix, "_QTL_results.txt");
+  } else {
+    output_file_name = tempfile();
+  }
+  
+  # Only associations significant at this level will be saved
+  pvOutputThreshold = threshold;
+  
+  # Error covariance matrix
+  # Set to numeric() for identity.
+  errorCovariance = numeric();
+  # errorCovariance = read.table("Sample_Data/errorCovariance.txt");
+  
+  
+  ## Load genotype data
+  
+  snps = SlicedData$new();
+  snps$fileDelimiter = "\t";      # the TAB character
+  snps$fileOmitCharacters = "NA"; # denote missing values;
+  snps$fileSkipRows = 1;          # one row of column labels
+  snps$fileSkipColumns = 1;       # one column of row labels
+  snps$fileSliceSize = 2000;      # read file in slices of 2,000 rows
+  snps$LoadFile(genotype_file_name);
+  
+  ## Load gene expression data
+  
+  gene = SlicedData$new();
+  gene$fileDelimiter = "\t";      # the TAB character
+  gene$fileOmitCharacters = "NA"; # denote missing values;
+  gene$fileSkipRows = 1;          # one row of column labels
+  gene$fileSkipColumns = 1;       # one column of row labels
+  gene$fileSliceSize = 2000;      # read file in slices of 2,000 rows
+  gene$LoadFile(expression_file_name);
+  
+  ## Load covariates
+  
+  cvrt = SlicedData$new();
+  cvrt$fileDelimiter = "\t";      # the TAB character
+  cvrt$fileOmitCharacters = "NA"; # denote missing values;
+  cvrt$fileSkipRows = 1;          # one row of column labels
+  cvrt$fileSkipColumns = 1;       # one column of row labels
+  if(length(covariates_file_name)>0) {
+    cvrt$LoadFile(covariates_file_name);
+  }
+  
+  ## Run the analysis
+  
+  me = Matrix_eQTL_engine(
+    snps = snps,
+    gene = gene,
+    cvrt = cvrt,
+    output_file_name = output_file_name,
+    pvOutputThreshold = pvOutputThreshold,
+    useModel = useModel, 
+    errorCovariance = errorCovariance, 
+    verbose = verbose,
+    pvalue.hist = TRUE,
+    min.pv.by.genesnp = FALSE,
+    noFDRsaveMemory = FALSE);
+  
+  unlink(output_file_name);
+  
+  ## Results:
+  
+  cat('Analysis of ', me$all$ntests, 'QTLs done in: ', me$time.in.sec, ' seconds', '\n');
+  cat('Detected eQTLs: ', me$all$neqtls, '\n');
+  
+  me <- data.frame(me$all$eqtls, stringsAsFactors = F)
+
+  if(is.data.frame(snp.pos)){
+    me <- merge(snp.pos, me,
+                by.x="snpid", by.y="snps",
+                all.y=T)
+    me$chr <- as.character(me$chr)
+    me$gene <- as.character(me$gene)
+    if(verbose){
+      print("SNP position annotation added to the QTL results.")
+    }
+  }
+  
+}
+
+
+
+
+#' convenience function to create ggplot2 manhattan plots of MatrixEQTL objects
+#'
+#' @family eqtl functions
+#' @title make manhattan plots of MatrixEQTL results
+#' @param me MatrixEQTL results as list or data.frame
+#' @param snp.pos data.frame with SNP annotations if not in me, SNP by cols:
+#'        colnames(snp.pos) <- c("snp_id", "chr", "pos") 
+#'        dosage values (usually between 0 and 2) in a matrix nsnp x nsample
+#' @param vcf is the genotype file a vcf file that needs to be converted?
+#'        (default FALSE)
+#' @param covariates_file_name filename of a tab separated file with covariate
+#'        values in a matrix ncovar x nsample
+#' @param snp.pos data.frame with SNP positions in the first three columns
+#'        named "snp_id", "chrom", "snp_pos" or TRUE if vcf=TRUE
+#' @param prefix name prefix for the outputfilenames        
+#' @param threshold significance threshold for eQTLs (default 1e-5)
+#' @param verbose print comments of progress (default TRUE)
+#' 
+#' @author Ines Assum (2019-03-21)
+#' @references
+#' @export
+manhattan.qtl <- function(me, snp.pos=NULL, build="b37", trait=NULL) {
+  require(ggplot2)
+  require(data.table)
+  add.chr.len.anno <- function(build, df=NULL){
+    chromosomeLength38 <- c(248956422, 242193529, 198295559, 190214555, 181538259, 170805979, 159345973, 145138636, 138394717, 133797422, 135086622, 133275309, 114364328, 107043718, 101991189, 90338345, 83257441, 80373285, 58617616, 64444167, 46709983, 50818468) # bp length from Ensembl GRCh38.p10
+    chromosomeLength37 <- c(249250621, 243199373, 198022430, 191154276, 180915260, 171115067, 159138663, 146364022, 141213431, 135534747,	135006516, 133851895, 115169878, 107349540, 102531392, 90354753, 81195210, 78077248, 59128983, 63025520, 48129895, 51304566) # bp length from Ensembl GRCh37.p13
+    if (build == 'b37') {
+      pos <- data.frame(Chromosome=1:22,
+                        chrLen=chromosomeLength37)
+    } else if (build == 'b38') {
+      pos <- data.frame(Chromosome=1:22,
+                        chrLen=chromosomeLength38)
+    } else if (build == 'custom') {
+      library(data.table)
+      pos <- as.data.table(df[, c("Chromosome", "Position")])
+      pos <- pos[, chrLen := max(Position), by = Chromosome]
+      pos <- pos[!duplicated(pos$Chromosome), ]
+      pos <- pos[order(pos$Chromosome), ]
+    } else {
+      stop("Build not supported")
+    }
+    pos$cumSum2 <- cumsum(pos$chrLen)
+    pos$cumSum <- pos$cumSum2-pos$chrLen
+    pos$tick <- pos$cumSum + (pos$chrLen)/2
+    return(pos)
+  }
+}
+
 
 #' Basic interface to obtain minimal P-values per gene from MatrixEQTL passing
 #' expression and covariate data in matrices, and genotypes as a file. The
