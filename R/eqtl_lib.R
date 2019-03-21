@@ -444,10 +444,56 @@ trans.qtl <- function(prefix,
       print("SNP position annotation added to the QTL results.")
     }
   }
-  
+  return(me)
 }
 
 
+
+#' convenience function to get cumulative chromosome lengths for manhattan plots
+#'
+#' @family annotation functions
+#' @title cumulative chromosome lengths
+#' @param build genome build to use, options: 'b37' for GRCh37.p13,
+#'        'b38' for GRCh38.p10, 'custom' (default 'b37')
+#' @param df data.frame containing custom annotations (default NULL)
+#' @param build.names names for colums with annotations for custom build,
+#'        order: chromosome, length (default NULL)
+#' 
+#' @author Ines Assum (2019-03-21)
+#' @references
+#' @export
+add.chr.len.anno <- function(build="b37", df=NULL, build.names=NULL){
+  chromosomeLength38 <- c(248956422, 242193529, 198295559, 190214555, 181538259,
+                          170805979, 159345973, 145138636, 138394717, 133797422,
+                          135086622, 133275309, 114364328, 107043718, 101991189,
+                          90338345, 83257441, 80373285, 58617616, 64444167,
+                          46709983, 50818468) # bp length from Ensembl GRCh38.p10
+  chromosomeLength37 <- c(249250621, 243199373, 198022430, 191154276, 180915260,
+                          171115067, 159138663, 146364022, 141213431, 135534747,
+                          135006516, 133851895, 115169878, 107349540, 102531392,
+                          90354753, 81195210, 78077248, 59128983, 63025520,
+                          48129895, 51304566) # bp length from Ensembl GRCh37.p13
+  if (build == 'b37') {
+    pos <- data.frame(Chromosome=1:22,
+                      chrLen=chromosomeLength37)
+  } else if (build == 'b38') {
+    pos <- data.frame(Chromosome=1:22,
+                      chrLen=chromosomeLength38)
+  } else if (build == 'custom') {
+    library(data.table)
+    df[, c("Chromosome", "Position")] <- df[, build.names]
+    pos <- as.data.table(df[, c("Chromosome", "Position")])
+    pos <- pos[, chrLen := max(Position), by = Chromosome]
+    pos <- pos[!duplicated(pos$Chromosome), ]
+    pos <- pos[order(pos$Chromosome), ]
+  } else {
+    stop("Build not supported")
+  }
+  pos$cumSum2 <- cumsum(pos$chrLen)
+  pos$cumSum <- pos$cumSum2-pos$chrLen
+  pos$tick <- pos$cumSum + (pos$chrLen)/2
+  return(pos)
+}
 
 
 #' convenience function to create ggplot2 manhattan plots of MatrixEQTL objects
@@ -455,48 +501,47 @@ trans.qtl <- function(prefix,
 #' @family eqtl functions
 #' @title make manhattan plots of MatrixEQTL results
 #' @param me MatrixEQTL results as list or data.frame
+#' @param build genome build to use, options: "b37", "b38", "custom"
+#'        (default "b37")
+#' @param build.names names for colums with annotations for custom build,
+#'        order: chr, length (default NULL)
 #' @param snp.pos data.frame with SNP annotations if not in me, SNP by cols:
-#'        colnames(snp.pos) <- c("snp_id", "chr", "pos") 
-#'        dosage values (usually between 0 and 2) in a matrix nsnp x nsample
-#' @param vcf is the genotype file a vcf file that needs to be converted?
-#'        (default FALSE)
-#' @param covariates_file_name filename of a tab separated file with covariate
-#'        values in a matrix ncovar x nsample
-#' @param snp.pos data.frame with SNP positions in the first three columns
-#'        named "snp_id", "chrom", "snp_pos" or TRUE if vcf=TRUE
-#' @param prefix name prefix for the outputfilenames        
-#' @param threshold significance threshold for eQTLs (default 1e-5)
-#' @param verbose print comments of progress (default TRUE)
+#'        colnames(snp.pos) <- c("snp_id", "chr", "pos")
+#' @param vcf vcf file to extract SNP annotations from (default NULL)
+#' @param trait character vector of gene/trait names to plot
 #' 
 #' @author Ines Assum (2019-03-21)
 #' @references
 #' @export
-manhattan.qtl <- function(me, snp.pos=NULL, build="b37", trait=NULL) {
+manhattan.qtl <- function(me, build="b37", snp.pos=NULL, trait=NULL, vcf=NULL, build.names=NULL) {
   require(ggplot2)
   require(data.table)
-  add.chr.len.anno <- function(build, df=NULL){
-    chromosomeLength38 <- c(248956422, 242193529, 198295559, 190214555, 181538259, 170805979, 159345973, 145138636, 138394717, 133797422, 135086622, 133275309, 114364328, 107043718, 101991189, 90338345, 83257441, 80373285, 58617616, 64444167, 46709983, 50818468) # bp length from Ensembl GRCh38.p10
-    chromosomeLength37 <- c(249250621, 243199373, 198022430, 191154276, 180915260, 171115067, 159138663, 146364022, 141213431, 135534747,	135006516, 133851895, 115169878, 107349540, 102531392, 90354753, 81195210, 78077248, 59128983, 63025520, 48129895, 51304566) # bp length from Ensembl GRCh37.p13
-    if (build == 'b37') {
-      pos <- data.frame(Chromosome=1:22,
-                        chrLen=chromosomeLength37)
-    } else if (build == 'b38') {
-      pos <- data.frame(Chromosome=1:22,
-                        chrLen=chromosomeLength38)
-    } else if (build == 'custom') {
-      library(data.table)
-      pos <- as.data.table(df[, c("Chromosome", "Position")])
-      pos <- pos[, chrLen := max(Position), by = Chromosome]
-      pos <- pos[!duplicated(pos$Chromosome), ]
-      pos <- pos[order(pos$Chromosome), ]
-    } else {
-      stop("Build not supported")
-    }
-    pos$cumSum2 <- cumsum(pos$chrLen)
-    pos$cumSum <- pos$cumSum2-pos$chrLen
-    pos$tick <- pos$cumSum + (pos$chrLen)/2
-    return(pos)
+
+  if (!is.data.frame(me)){
+    me <- data.frame(me$all$eqtls,
+                     stringsAsFactors = F)
   }
+  
+  if(!is.null(trait)){
+    me <- me[me$gene %in% trait, ]
+  }
+  if(!is.null(snp.pos)){
+    me <- merge(snp.pos, me,
+                by.x="snpid", by.y="snps",
+                all.y=T)
+  }
+  pos <- add.chr.len.anno(build, df=me, build.names)
+  me <- merge(me, pos,
+                by.x="chr", by.y="Chromosome",
+                all.x = T)
+  me$cumPos <- me$pos + me$cumSum
+  qtl.plot <- ggplot(me, aes(x=cumPos, y=-log10(pvalue), col = chr)) +
+    geom_point() +
+    theme_bw() +
+    scale_color_manual(values = rep(c("grey", "skyblue"), 22),
+                       guide=FALSE) +
+    scale_x_continuous(label = pos$Chromosome, breaks = pos$tick)
+  return(qtl.plot)
 }
 
 
