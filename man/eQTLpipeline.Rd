@@ -23,4 +23,3 @@ LazyLoad: \tab yes\cr
 #insertexample()
 }
 \keyword{package}
-

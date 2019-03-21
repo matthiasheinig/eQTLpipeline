@@ -20,6 +20,7 @@ so we need to make it extra failsafe.
 }
 \seealso{
 Other eqtl functions: \code{\link{eqtl.min.p}},
-  \code{\link{eqtl.run}}, \code{\link{eqtl}}
+  \code{\link{eqtl.run}}, \code{\link{eqtl}},
+  \code{\link{manhattan.qtl}}, \code{\link{trans.qtl}}
 }
-
+\concept{eqtl functions}

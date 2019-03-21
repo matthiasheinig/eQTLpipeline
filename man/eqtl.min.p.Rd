@@ -32,6 +32,7 @@ function uses \code{\link{eqtl}}.
 }
 \seealso{
 Other eqtl functions: \code{\link{eqtl.run}},
-  \code{\link{eqtl}}, \code{\link{myWaitForJobs}}
+  \code{\link{eqtl}}, \code{\link{manhattan.qtl}},
+  \code{\link{myWaitForJobs}}, \code{\link{trans.qtl}}
 }
-
+\concept{eqtl functions}
