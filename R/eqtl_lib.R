@@ -220,7 +220,7 @@ eqtl.run <- function(expr, covar, genotype_file_name, gene.position, snp.pos, id
 #' @param vcf is the genotype file a vcf file that needs to be converted?
 #'        (default FALSE)
 #' @param snp.pos data.frame with SNP positions to be added to matrixEQTL object
-#'        in the end. Columns named "snps", "chr", "snp.pos", containing
+#'        in the end. Columns named "snps", "chr", "pos", containing
 #'        information in that order (default NULL)
 #'        if vcf=TRUE, snp.pos=TRUE extracts information from vcf file
 #' @param expression_file_name filename of a tab separated file with expression
@@ -333,7 +333,7 @@ trans.qtl <- function(prefix,
     genotype_file_name <- geno.file
     if(isTRUE(snp.pos)){
       snp.pos <- rowRanges(vcf.file)
-      snp.pos <- data.frame(snpid=names(snp.pos),
+      snp.pos <- data.frame(snps=names(snp.pos),
                             chr=as.numeric(as.character(seqnames(snp.pos))),
                             pos=start(snp.pos),
                             stringsAsFactors = F)
@@ -518,7 +518,6 @@ trans.qtl <- function(prefix,
 
   if(is.data.frame(snp.pos)){
     me <- merge(snp.pos, me,
-                by.x="snpid", by.y="snps",
                 all.y=T)
     me$chr <- as.character(me$chr)
     me$gene <- as.character(me$gene)
@@ -539,7 +538,7 @@ trans.qtl <- function(prefix,
 #'        'b38' for GRCh38.p10, 'custom' (default 'b37')
 #' @param df data.frame containing custom annotations (default NULL)
 #' @param build.names names for colums with annotations for custom build,
-#'        order: chromosome, length (default NULL)
+#'        order: chromosome (chr), length (pos) (default NULL)
 #' 
 #' @author Ines Assum (2019-03-21)
 #' @references
@@ -563,11 +562,11 @@ add.chr.len.anno <- function(build="b37", df=NULL, build.names=NULL){
                       chrLen=chromosomeLength38)
   } else if (build == 'custom') {
     library(data.table)
-    df[, c("Chromosome", "Position")] <- df[, build.names]
-    pos <- as.data.table(df[, c("Chromosome", "Position")])
-    pos <- pos[, chrLen := max(Position), by = Chromosome]
-    pos <- pos[!duplicated(pos$Chromosome), ]
-    pos <- pos[order(pos$Chromosome), ]
+    df[, c("chr", "pos")] <- df[, build.names]
+    pos <- as.data.table(df[, c("chr", "pos")])
+    pos <- pos[, chrLen := max(pos), by = chr]
+    pos <- pos[!duplicated(pos$chr), ]
+    pos <- pos[order(pos$chr), ]
   } else {
     stop("Build not supported")
   }

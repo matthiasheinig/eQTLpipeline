@@ -20,7 +20,7 @@ dosage values (usually between 0 and 2) in a matrix nsnp x nsample}
 (default FALSE)}
 
 \item{snp.pos}{data.frame with SNP positions to be added to matrixEQTL object
-in the end. Columns named "snps", "chr", "snp.pos", containing
+in the end. Columns named "snps", "chr", "pos", containing
 information in that order (default NULL)
 if vcf=TRUE, snp.pos=TRUE extracts information from vcf file}
 

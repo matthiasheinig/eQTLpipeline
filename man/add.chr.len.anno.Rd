@@ -13,7 +13,7 @@ add.chr.len.anno(build = "b37", df = NULL, build.names = NULL)
 \item{df}{data.frame containing custom annotations (default NULL)}
 
 \item{build.names}{names for colums with annotations for custom build,
-order: chromosome, length (default NULL)}
+order: chromosome (chr), length (pos) (default NULL)}
 }
 \description{
 convenience function to get cumulative chromosome lengths for manhattan plots
