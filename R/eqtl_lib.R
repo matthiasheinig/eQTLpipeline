@@ -327,8 +327,7 @@ trans.qtl <- function(prefix,
                 row.names = F, col.names = T, quote = F, sep = "\t",
                 file = geno.file)
     if(verbose){
-      print("Created genotype file from .vcf file at:")
-      print(geno.file)
+      cat("Created genotype file from .vcf file at:\n", geno.file, "\n")
     }
     genotype_file_name <- geno.file
     if(isTRUE(snp.pos)){
@@ -338,19 +337,19 @@ trans.qtl <- function(prefix,
                             pos=start(snp.pos),
                             stringsAsFactors = F)
       if(verbose){
-        print("SNP annotations extracted from the .vcf file.")
+        cat("SNP annotations extracted from the .vcf file.\n")
       }
     }
   }
   if(is.data.frame(snp.pos)){
     if(verbose){
-      print("SNP position annotation will be added to the results in the end.")
+      cat("SNP position annotation will be added to the results in the end.\n")
     }
   }
   
   if (is.character(expression_file_name) && length(expression_file_name)>0) {
     if(verbose){
-      cat("Expression file will be read from:\n", expression_file_name)
+      cat("Expression file will be read from:\n", expression_file_name, "\n")
     }
   } else if (is.data.frame(expression_file_name)){
     expr.file <- paste0(prefix, "_gene.txt")
@@ -361,7 +360,7 @@ trans.qtl <- function(prefix,
       dim <- dim(expression_file_name)
       cat("Created expression file from data.frame for ",
           dim[1], " genes by ",
-          dim[2], " individuals at:\n", expr.file)
+          dim[2], " individuals at:\n", expr.file, "\n")
     }
     expression_file_name <- expr.file
   } else if (is.matrix(expression_file_name)){
@@ -392,49 +391,49 @@ trans.qtl <- function(prefix,
     error("Something went wrong with importing your expression data.")
   }
   
-  if (is.character(covariate_file_name) && length(covariate_file_name)>0) {
+  if (is.character(covariates_file_name) && length(covariates_file_name)>0) {
     if(verbose){
-      cat("Covariate file will be read from:\n", covariate_file_name)
+      cat("Covariate file will be read from:\n", covariates_file_name)
     }
-  } else if (is.data.frame(covariate_file_name)){
+  } else if (is.data.frame(covariates_file_name)){
     cov.file <- paste0(prefix, "_covariate.txt")
-    write.table(cbind(covid=rownames(covariate_file_name), covariate_file_name),
+    write.table(cbind(covid=rownames(covariates_file_name), covariates_file_name),
                 row.names = F, col.names = T, quote = F, sep = "\t",
                 file = cov.file)
     if(verbose){
-      dim <- dim(covariate_file_name)
+      dim <- dim(covariates_file_name)
       cat("Created covariate file from data.frame for ",
           dim[1], " genes by ",
           dim[2], " individuals at:\n", cov.file)
     }
-    covariate_file_name <- cov.file
-  } else if (is.matrix(covariate_file_name)){
+    covariates_file_name <- cov.file
+  } else if (is.matrix(covariates_file_name)){
     cov.file <- paste0(prefix, "_covariate.txt")
-    write.table(cbind(covid=rownames(covariate_file_name), covariate_file_name),
+    write.table(cbind(covid=rownames(covariates_file_name), covariates_file_name),
                 row.names = F, col.names = T, quote = F, sep = "\t",
                 file = cov.file)
     if(verbose){
-      dim <- dim(covariate_file_name)
+      dim <- dim(covariates_file_name)
       cat("Created covariate file from matrix for ",
           dim[1], " genes by ",
           dim[2], " individuals at:\n", cov.file)
     }
-    covariate_file_name <- cov.file
-  } else if (is.vector(covariate_file_name) && is.numeric(covariate_file_name)>0) {
+    covariates_file_name <- cov.file
+  } else if (is.vector(covariates_file_name) && is.numeric(covariates_file_name)>0) {
     cov.file <- paste0(prefix, "_covariate.txt")
-    write.table(rbind(c("covid", paste0("sample", 1:length(covariate_file_name))),
-                      c("cov1", covariate_file_name)),
+    write.table(rbind(c("covid", paste0("sample", 1:length(covariates_file_name))),
+                      c("cov1", covariates_file_name)),
                 row.names = F, col.names = T, quote = F, sep = "\t",
                 file = cov.file)
     if(verbose){
-      dim <- length(covariate_file_name)
+      dim <- length(covariates_file_name)
       cat("Created covariate file for a single gene for", dim,
           "individuals at:\n", cov.file)
     }
-    covariate_file_name <- cov.file
+    covariates_file_name <- cov.file
   } else if (length(covariates_file_name)==0) {
     if(verbose){
-      print("No covariates used in this analysis")
+      cat("No covariates used in this analysis\n")
     }
   } else {
     error("Something went wrong with importing your covariate data.")
@@ -522,7 +521,7 @@ trans.qtl <- function(prefix,
     me$chr <- as.character(me$chr)
     me$gene <- as.character(me$gene)
     if(verbose){
-      print("SNP position annotation added to the QTL results.")
+      cat("SNP position annotation added to the QTL results.\n")
     }
   }
   return(me)
@@ -555,10 +554,10 @@ add.chr.len.anno <- function(build="b37", df=NULL, build.names=NULL){
                           90354753, 81195210, 78077248, 59128983, 63025520,
                           48129895, 51304566) # bp length from Ensembl GRCh37.p13
   if (build == 'b37') {
-    pos <- data.frame(Chromosome=1:22,
+    pos <- data.frame(chr=1:22,
                       chrLen=chromosomeLength37)
   } else if (build == 'b38') {
-    pos <- data.frame(Chromosome=1:22,
+    pos <- data.frame(chr=1:22,
                       chrLen=chromosomeLength38)
   } else if (build == 'custom') {
     library(data.table)
@@ -587,7 +586,7 @@ add.chr.len.anno <- function(build="b37", df=NULL, build.names=NULL){
 #' @param build.names names for colums with annotations for custom build,
 #'        order: chr, length (default NULL)
 #' @param snp.pos data.frame with SNP annotations if not in me, SNP by cols:
-#'        colnames(snp.pos) <- c("snp_id", "chr", "pos")
+#'        colnames(snp.pos) <- c("snps", "chr", "pos")
 #' @param vcf vcf file to extract SNP annotations from (default NULL)
 #' @param trait character vector of gene/trait names to plot
 #' 
@@ -608,20 +607,18 @@ manhattan.qtl <- function(me, build="b37", snp.pos=NULL, trait=NULL, vcf=NULL, b
   }
   if(!is.null(snp.pos)){
     me <- merge(snp.pos, me,
-                by.x="snpid", by.y="snps",
                 all.y=T)
   }
   pos <- add.chr.len.anno(build, df=me, build.names)
   me <- merge(me, pos,
-                by.x="chr", by.y="Chromosome",
-                all.x = T)
+              all.x = T)
   me$cumPos <- me$pos + me$cumSum
   qtl.plot <- ggplot(me, aes(x=cumPos, y=-log10(pvalue), col = chr)) +
     geom_point() +
     theme_bw() +
     scale_color_manual(values = rep(c("grey", "skyblue"), 22),
                        guide=FALSE) +
-    scale_x_continuous(label = pos$Chromosome, breaks = pos$tick)
+    scale_x_continuous(label = pos$chr, breaks = pos$tick)
   return(qtl.plot)
 }
 

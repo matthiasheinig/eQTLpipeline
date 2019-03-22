@@ -14,7 +14,7 @@ manhattan.qtl(me, build = "b37", snp.pos = NULL, trait = NULL,
 (default "b37")}
 
 \item{snp.pos}{data.frame with SNP annotations if not in me, SNP by cols:
-colnames(snp.pos) <- c("snp_id", "chr", "pos")}
+colnames(snp.pos) <- c("snps", "chr", "pos")}
 
 \item{trait}{character vector of gene/trait names to plot}
 
