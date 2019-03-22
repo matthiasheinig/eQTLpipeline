@@ -7,11 +7,11 @@
 trans.qtl(prefix, genotype_file_name, vcf = FALSE, snp.pos = NULL,
   expression_file_name, covariates_file_name = character(),
   threshold = 1e-05, verbose = TRUE, save.memory = FALSE,
-  gene.position = NULL, redo = FALSE, compute.all = FALSE,
-  what = "table")
+  id.check = FALSE, gene.position = NULL, redo = FALSE,
+  compute.all = FALSE, what = "table")
 }
 \arguments{
-\item{prefix}{name prefix for the outputfilenames}
+\item{prefix}{path and prefix for the outputfiles (default NULL)}
 
 \item{genotype_file_name}{filename of a tab separated file with genotype
 dosage values (usually between 0 and 2) in a matrix nsnp x nsample}
@@ -19,16 +19,26 @@ dosage values (usually between 0 and 2) in a matrix nsnp x nsample}
 \item{vcf}{is the genotype file a vcf file that needs to be converted?
 (default FALSE)}
 
-\item{snp.pos}{data.frame with SNP positions in the first three columns
-named "snp_id", "chrom", "snp_pos" or TRUE if vcf=TRUE}
+\item{snp.pos}{data.frame with SNP positions to be added to matrixEQTL object
+in the end. Columns named "snps", "chr", "snp.pos", containing
+information in that order (default NULL)
+if vcf=TRUE, snp.pos=TRUE extracts information from vcf file}
 
 \item{expression_file_name}{filename of a tab separated file with expression
-values in a matrix ngene x nsample}
+values in a matrix ngene x nsample.
+if expression_file_name is a numeric vector (lenght(nsample)),
+matrix (ngene x nsample) or data.frame (ngene x nsample), the
+expression file is created with the name prefix_gene.txt.}
 
 \item{covariates_file_name}{filename of a tab separated file with covariate
-values in a matrix ncovar x nsample}
+values in a matrix ncovar x nsample
+to not use any covariates, set covariates_file_name=character()
+if covariates_file_name is a numeric vector (lenght(nsample)),
+matrix (ngene x nsample) or data.frame (ngene x nsample), the
+covariate file is created with the name prefix_covariates.txt.}
 
-\item{threshold}{significance threshold for eQTLs (default 1e-5)}
+\item{threshold}{significance threshold for eQTLs (default 1e-5), set to 1 to
+get all QTLs}
 
 \item{verbose}{print comments of progress (default TRUE)
 
@@ -36,6 +46,9 @@ Parameters /options I would like to add:}
 
 \item{save.memory}{prevent FDR correction (default FALSE)
 https://github.com/andreyshabalin/MatrixEQTL/issues/8}
+
+\item{id.check}{check if ids and order of ids match in genotype, expression
+and covariate data (default FALSE)}
 
 \item{gene.position}{data.frame with gene positions in the first 4 columns
 named "gene_id", "chrom", "start", "end"}
@@ -52,13 +65,12 @@ be set to "object" to get the MatrixEQTL result object.}
 \item{threshold.trans}{Parameters/options in the old wrapper that do not work currently:}
 }
 \value{
-if what is "table" the function returns the eQTL results as a table
-        if what is "object" the function returns the MatrixEQTL object.
+the data.frame contained in the MatrixEQTL object me$all$eqtls
 }
 \description{
 Interface to the MatrixEQTL Matrix_eQTL_engine()
 This is a simplified version for more general (trans)QTL analyses,
-e.g. GWAS or metaboliteQTL and does not need
+e.g. GWAS or metaboliteQTL and does not need gene annotations
 }
 \seealso{
 Other eqtl functions: \code{\link{eqtl.min.p}},

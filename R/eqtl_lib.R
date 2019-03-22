@@ -210,25 +210,37 @@ eqtl.run <- function(expr, covar, genotype_file_name, gene.position, snp.pos, id
 
 #' Interface to the MatrixEQTL Matrix_eQTL_engine()
 #' This is a simplified version for more general (trans)QTL analyses,
-#' e.g. GWAS or metaboliteQTL and does not need
+#' e.g. GWAS or metaboliteQTL and does not need gene annotations
 #'
 #' @family eqtl functions
 #' @title transQTL interface
-#' @param expression_file_name filename of a tab separated file with expression
-#'        values in a matrix ngene x nsample
+#' @param prefix path and prefix for the outputfiles (default NULL)
 #' @param genotype_file_name filename of a tab separated file with genotype
 #'        dosage values (usually between 0 and 2) in a matrix nsnp x nsample
 #' @param vcf is the genotype file a vcf file that needs to be converted?
 #'        (default FALSE)
+#' @param snp.pos data.frame with SNP positions to be added to matrixEQTL object
+#'        in the end. Columns named "snps", "chr", "snp.pos", containing
+#'        information in that order (default NULL)
+#'        if vcf=TRUE, snp.pos=TRUE extracts information from vcf file
+#' @param expression_file_name filename of a tab separated file with expression
+#'        values in a matrix ngene x nsample.
+#'        if expression_file_name is a numeric vector (lenght(nsample)),
+#'        matrix (ngene x nsample) or data.frame (ngene x nsample), the
+#'        expression file is created with the name prefix_gene.txt.
 #' @param covariates_file_name filename of a tab separated file with covariate
 #'        values in a matrix ncovar x nsample
-#' @param snp.pos data.frame with SNP positions in the first three columns
-#'        named "snp_id", "chrom", "snp_pos" or TRUE if vcf=TRUE
-#' @param prefix name prefix for the outputfilenames        
-#' @param threshold significance threshold for eQTLs (default 1e-5)
+#'        to not use any covariates, set covariates_file_name=character()
+#'        if covariates_file_name is a numeric vector (lenght(nsample)),
+#'        matrix (ngene x nsample) or data.frame (ngene x nsample), the
+#'        covariate file is created with the name prefix_covariates.txt.
+#' @param threshold significance threshold for eQTLs (default 1e-5), set to 1 to
+#'        get all QTLs
 #' @param verbose print comments of progress (default TRUE)
 #' 
 #' Parameters /options I would like to add:
+#' @param id.check check if ids and order of ids match in genotype, expression
+#'        and covariate data (default FALSE)
 #' @param save.memory prevent FDR correction (default FALSE)
 #'        https://github.com/andreyshabalin/MatrixEQTL/issues/8 
 #' @param threshold.cis
@@ -243,8 +255,7 @@ eqtl.run <- function(expr, covar, genotype_file_name, gene.position, snp.pos, id
 #'        for all tests are required set this to TRUE (default FALSE)
 #' @param what flag to determine what should be returned (default "table"). Can
 #'        be set to "object" to get the MatrixEQTL result object.
-#' @return if what is "table" the function returns the eQTL results as a table
-#'         if what is "object" the function returns the MatrixEQTL object.
+#' @return the data.frame contained in the MatrixEQTL object me$all$eqtls
 #' @author Ines Assum (2019-03-21)
 #' @references
 #' @export
@@ -257,21 +268,23 @@ trans.qtl <- function(prefix,
                       threshold=1e-5,
                       verbose=TRUE,
                       save.memory=FALSE,
+                      id.check=FALSE,
                       gene.position=NULL, redo=FALSE, compute.all=FALSE, what="table") {
 
-  
+  # TODO:
+  # implement id.check:
+  # check if ids and order of ids match in genotype, expression and covariate data
+
   # for debug purposes:
   if(F){
     setwd("~/Documents/Lehre/gitlab_systems_genetics_exercise/2019")
-    threshold <- 1
-    # threshold.cis=1
-    # threshold.trans=1
-    save.memory <- FALSE
-    verbose <- TRUE
-    prefix <- "../data/20190303/matrixEQTL/egeuv1_risk_filtered"
-    genotype_file_name <- "../data/20190303/filtered.vcf.bgz"
-    vcf <- TRUE
-    snp.pos <- TRUE
+    prefix="../data/20190303/matrixEQTL/egeuv1_risk_filtered"
+    genotype_file_name="../data/20190303/filtered.vcf.bgz"
+    vcf=TRUE
+    snp.pos=snp.pos
+    expression_file_name=expr
+    covariates_file_name=character()
+    threshold=1
     
     egeuv1_2 <- readRDS("../data/20190303/plink/egeuv_risk_filtered_gwaa.data.RDS")
     phenos <- phdata(egeuv1_2)
@@ -292,6 +305,13 @@ trans.qtl <- function(prefix,
     require(dplyr)
     require(VariantAnnotation)
     require(snpStats)
+  }
+  
+  if(is.null(prefix)){
+    if(!dir.exists(paste0(getwd(), "/matrixEQTL"))){
+      dir.create(paste0(getwd(), "/matrixEQTL"), showWarnings = F, recursive = T)
+    }
+    prefix <- paste0(getwd(), "/matrixEQTL/test")
   }
   
   ## Location of the package with the data files.
@@ -327,35 +347,97 @@ trans.qtl <- function(prefix,
       print("SNP position annotation will be added to the results in the end.")
     }
   }
-  if(is.data.frame(expression_file_name)){
+  
+  if (is.character(expression_file_name) && length(expression_file_name)>0) {
+    if(verbose){
+      cat("Expression file will be read from:\n", expression_file_name)
+    }
+  } else if (is.data.frame(expression_file_name)){
     expr.file <- paste0(prefix, "_gene.txt")
     write.table(cbind(geneid=rownames(expression_file_name), expression_file_name),
                 row.names = F, col.names = T, quote = F, sep = "\t",
                 file = expr.file)
     if(verbose){
-      print(paste0("Created expression file for ",
-                   dim(expression_file_name)[1], " genes by ",
-                   dim(expression_file_name)[2], " individuals at:"))
-      print(expr.file)
+      dim <- dim(expression_file_name)
+      cat("Created expression file from data.frame for ",
+          dim[1], " genes by ",
+          dim[2], " individuals at:\n", expr.file)
     }
     expression_file_name <- expr.file
+  } else if (is.matrix(expression_file_name)){
+    expr.file <- paste0(prefix, "_gene.txt")
+    write.table(cbind(geneid=rownames(expression_file_name), expression_file_name),
+                row.names = F, col.names = T, quote = F, sep = "\t",
+                file = expr.file)
+    if(verbose){
+      dim <- dim(expression_file_name)
+      cat("Created expression file from matrix for ",
+          dim[1], " genes by ",
+          dim[2], " individuals at:\n", expr.file)
+    }
+    expression_file_name <- expr.file
+  } else if (is.vector(expression_file_name) && is.numeric(expression_file_name)>0) {
+    expr.file <- paste0(prefix, "_gene.txt")
+    write.table(rbind(c("geneid", paste0("sample", 1:length(expression_file_name))),
+                      c("gene1", expression_file_name)),
+                row.names = F, col.names = T, quote = F, sep = "\t",
+                file = expr.file)
+    if(verbose){
+      dim <- length(expression_file_name)
+      cat("Created expression file for a single gene for", dim,
+          "individuals at:\n", expr.file)
+    }
+    expression_file_name <- expr.file
+  } else {
+    error("Something went wrong with importing your expression data.")
   }
-  if(is.data.frame(covariates_file_name)){
-    cov.file <- paste0(prefix, "_covariates.txt")
-    write.table(cbind(covs=rownames(covariates_file_name), covariates_file_name),
+  
+  if (is.character(covariate_file_name) && length(covariate_file_name)>0) {
+    if(verbose){
+      cat("Covariate file will be read from:\n", covariate_file_name)
+    }
+  } else if (is.data.frame(covariate_file_name)){
+    cov.file <- paste0(prefix, "_covariate.txt")
+    write.table(cbind(covid=rownames(covariate_file_name), covariate_file_name),
                 row.names = F, col.names = T, quote = F, sep = "\t",
                 file = cov.file)
     if(verbose){
-      print(paste0("Created covariates file for ",
-                   dim(covariates_file_name)[1], " covariates by ",
-                   dim(covariates_file_name)[2], " individuals at:"))
-      print(cov.file)
+      dim <- dim(covariate_file_name)
+      cat("Created covariate file from data.frame for ",
+          dim[1], " genes by ",
+          dim[2], " individuals at:\n", cov.file)
     }
-    covariates_file_name <- cov.file
-  } else if (length(covariates_file_name)>0) {
+    covariate_file_name <- cov.file
+  } else if (is.matrix(covariate_file_name)){
+    cov.file <- paste0(prefix, "_covariate.txt")
+    write.table(cbind(covid=rownames(covariate_file_name), covariate_file_name),
+                row.names = F, col.names = T, quote = F, sep = "\t",
+                file = cov.file)
+    if(verbose){
+      dim <- dim(covariate_file_name)
+      cat("Created covariate file from matrix for ",
+          dim[1], " genes by ",
+          dim[2], " individuals at:\n", cov.file)
+    }
+    covariate_file_name <- cov.file
+  } else if (is.vector(covariate_file_name) && is.numeric(covariate_file_name)>0) {
+    cov.file <- paste0(prefix, "_covariate.txt")
+    write.table(rbind(c("covid", paste0("sample", 1:length(covariate_file_name))),
+                      c("cov1", covariate_file_name)),
+                row.names = F, col.names = T, quote = F, sep = "\t",
+                file = cov.file)
+    if(verbose){
+      dim <- length(covariate_file_name)
+      cat("Created covariate file for a single gene for", dim,
+          "individuals at:\n", cov.file)
+    }
+    covariate_file_name <- cov.file
+  } else if (length(covariates_file_name)==0) {
     if(verbose){
       print("No covariates used in this analysis")
     }
+  } else {
+    error("Something went wrong with importing your covariate data.")
   }
 
   ## Settings
