@@ -222,40 +222,58 @@ eqtl.run <- function(expr, covar, genotype_file_name, gene.position, snp.pos, id
 #' @param snp.pos data.frame with SNP positions to be added to matrixEQTL object
 #'        in the end. Columns named "snps", "chr", "pos", containing
 #'        information in that order (default NULL)
-#'        if vcf=TRUE, snp.pos=TRUE extracts information from vcf file
+#'        if vcf=TRUE and snp.pos=TRUE | snp.pos=NULL, information is extracted
+#'        from vcf file unless save.memory=TRUE.
+#'        if snp.pos=FALSE, no annotation is added
 #' @param expression_file_name filename of a tab separated file with expression
 #'        values in a matrix ngene x nsample.
-#'        if expression_file_name is a numeric vector (lenght(nsample)),
+#'        if expression_file_name is a numeric vector (lenght nsample),
 #'        matrix (ngene x nsample) or data.frame (ngene x nsample), the
 #'        expression file is created with the name prefix_gene.txt.
 #' @param covariates_file_name filename of a tab separated file with covariate
 #'        values in a matrix ncovar x nsample
 #'        to not use any covariates, set covariates_file_name=character()
-#'        if covariates_file_name is a numeric vector (lenght(nsample)),
+#'        if covariates_file_name is a numeric vector (lenght nsample),
 #'        matrix (ngene x nsample) or data.frame (ngene x nsample), the
 #'        covariate file is created with the name prefix_covariates.txt.
 #' @param threshold significance threshold for eQTLs (default 1e-5), set to 1 to
-#'        get all QTLs
+#'        get all QTLs. threshold set to 1 for compute.all=TRUE
+#' @param compute.all MatrixEQTL reports only significant results, if results
+#'        for all tests are required set this to TRUE (default FALSE)
+#' @param save.memory prevent FDR correction (default FALSE). only functional in
+#'        the github-version of MatrixEQTL, see also
+#'        https://github.com/andreyshabalin/MatrixEQTL/issues/8
+#' @param what flag to determine if a table or the MatrixEQTL object should be
+#'        returned (default NULL). If unspecified, a table is returned except
+#'        either save.memory=TRUE or min.pv.by.genesnp=TRUE, then the MatrixEQTL
+#'        result object is returned.
+#' @param min.pv.by.genesnp option to report the minimal pvalue per SNP and per
+#'        gene in the MatrixEQTL object (default FALSE). If you want to use this
+#'        option, make sure to set what="object" to get the results.
 #' @param verbose print comments of progress (default TRUE)
+#' @param redo logical, if TRUE the results will always be recomputed, if FALSE
+#'        the results will be loaded if they exist (default TRUE)
+#' @param load.qtls (default FALSE) only relevant for save.memory=TRUE which is
+#'        mostly used for big datasets. In that case, QTL results are not
+#'        reported in the MatrixEQTL object but can be read in with
+#'        load.qtls=TRUE.
+#' @param keep.outfile unless compute.all=T or save.memory=T, results are written
+#'        to a temp file that is deleted. (default FALSE)
 #' 
 #' Parameters /options I would like to add:
 #' @param id.check check if ids and order of ids match in genotype, expression
 #'        and covariate data (default FALSE)
-#' @param save.memory prevent FDR correction (default FALSE)
-#'        https://github.com/andreyshabalin/MatrixEQTL/issues/8 
 #' @param threshold.cis
 #' @param threshold.trans
 #'
 #' Parameters/options in the old wrapper that do not work currently:
 #' @param gene.position data.frame with gene positions in the first 4 columns
 #'        named "gene_id", "chrom", "start", "end"
-#' @param redo logical, if TRUE the results will always be recomputed, if FALSE
-#'        the results will be loaded if they exist (default FALSE)
-#' @param compute.all MatrixEQTL reports only significant results, if results
-#'        for all tests are required set this to TRUE (default FALSE)
-#' @param what flag to determine what should be returned (default "table"). Can
-#'        be set to "object" to get the MatrixEQTL result object.
-#' @return the data.frame contained in the MatrixEQTL object me$all$eqtls
+#'        
+#'
+#' @return if what="table", the data.frame contained in the MatrixEQTL object
+#'         me$all$eqtls is returned. If what="object", the whole MatrixEQTL
+#'         object is returned.
 #' @author Ines Assum (2019-03-21)
 #' @references
 #' @export
@@ -266,37 +284,20 @@ trans.qtl <- function(prefix,
                       expression_file_name,
                       covariates_file_name=character(),
                       threshold=1e-5,
-                      verbose=TRUE,
+                      compute.all=FALSE,
+                      what=NULL,
+                      min.pv.by.genesnp=FALSE,
                       save.memory=FALSE,
+                      verbose=TRUE,
+                      redo=TRUE,
+                      load.qtls=FALSE,
+                      keep.outfile=FALSE,
                       id.check=FALSE,
-                      gene.position=NULL, redo=FALSE, compute.all=FALSE, what="table") {
+                      gene.position=NULL) {
 
   # TODO:
   # implement id.check:
   # check if ids and order of ids match in genotype, expression and covariate data
-
-  # for debug purposes:
-  if(F){
-    setwd("~/Documents/Lehre/gitlab_systems_genetics_exercise/2019")
-    prefix="../data/20190303/matrixEQTL/egeuv1_risk_filtered"
-    genotype_file_name="../data/20190303/filtered.vcf.bgz"
-    vcf=TRUE
-    snp.pos=snp.pos
-    expression_file_name=expr
-    covariates_file_name=character()
-    threshold=1
-    
-    egeuv1_2 <- readRDS("../data/20190303/plink/egeuv_risk_filtered_gwaa.data.RDS")
-    phenos <- phdata(egeuv1_2)
-    genes <- c("ENSG00000109787", "ENSG00000241163")
-    expr <- data.frame(t(phenos[, c("SCORESUM", "ENSG00000109787.8", "ENSG00000241163.1")]),
-                       stringsAsFactors = F)
-    expression_file_name <- expr
-    covariates_file_name <- character()
-
-  }
-    
-
 
   # libraries:
   require(MatrixEQTL)
@@ -314,6 +315,29 @@ trans.qtl <- function(prefix,
     prefix <- paste0(getwd(), "/matrixEQTL/test")
   }
   
+  if (is.null(what)){
+    what <- "table"
+    if (save.memory | min.pv.by.genesnp){
+      what <- "object"
+    }
+  }
+  
+  # Output file name
+  if (save.memory | compute.all | keep.outfile){
+    output_file_name = paste0(prefix, "_QTL_results.txt");
+  } else {
+    output_file_name = tempfile();
+  }
+  
+  if (file.exists(output_file_name) && !redo) {
+    cat("QTL_results already exist in file\n", output_file_name, "\n",
+        "and will not be recomputed because redo=F\n")
+    eqtl = fread(output_file_name, sep="\t", stringsAsFactors=F)
+    colnames(me$all$eqtls) <- c("snps", "gene", "beta", "statistic", "pvalue")
+    return(eqtl)
+  }
+  
+  
   ## Location of the package with the data files.
   base.dir = prefix;
   
@@ -330,6 +354,9 @@ trans.qtl <- function(prefix,
       cat("Created genotype file from .vcf file at:\n", geno.file, "\n")
     }
     genotype_file_name <- geno.file
+    if(is.null(snp.pos) & vcf==T & isFALSE(save.memory)){
+      snp.pos <- T
+    }
     if(isTRUE(snp.pos)){
       snp.pos <- rowRanges(vcf.file)
       snp.pos <- data.frame(snps=names(snp.pos),
@@ -372,19 +399,19 @@ trans.qtl <- function(prefix,
       dim <- dim(expression_file_name)
       cat("Created expression file from matrix for ",
           dim[1], " genes by ",
-          dim[2], " individuals at:\n", expr.file)
+          dim[2], " individuals at:\n", expr.file, "\n")
     }
     expression_file_name <- expr.file
-  } else if (is.vector(expression_file_name) && is.numeric(expression_file_name)>0) {
+  } else if (is.vector(expression_file_name) && is.numeric(expression_file_name)) {
     expr.file <- paste0(prefix, "_gene.txt")
     write.table(rbind(c("geneid", paste0("sample", 1:length(expression_file_name))),
                       c("gene1", expression_file_name)),
-                row.names = F, col.names = T, quote = F, sep = "\t",
+                row.names = F, col.names = F, quote = F, sep = "\t",
                 file = expr.file)
     if(verbose){
       dim <- length(expression_file_name)
       cat("Created expression file for a single gene for", dim,
-          "individuals at:\n", expr.file)
+          "individuals at:\n", expr.file, "\n")
     }
     expression_file_name <- expr.file
   } else {
@@ -393,7 +420,7 @@ trans.qtl <- function(prefix,
   
   if (is.character(covariates_file_name) && length(covariates_file_name)>0) {
     if(verbose){
-      cat("Covariate file will be read from:\n", covariates_file_name)
+      cat("Covariate file will be read from:\n", covariates_file_name, "\n")
     }
   } else if (is.data.frame(covariates_file_name)){
     cov.file <- paste0(prefix, "_covariate.txt")
@@ -404,7 +431,7 @@ trans.qtl <- function(prefix,
       dim <- dim(covariates_file_name)
       cat("Created covariate file from data.frame for ",
           dim[1], " genes by ",
-          dim[2], " individuals at:\n", cov.file)
+          dim[2], " individuals at:\n", cov.file, "\n")
     }
     covariates_file_name <- cov.file
   } else if (is.matrix(covariates_file_name)){
@@ -416,19 +443,19 @@ trans.qtl <- function(prefix,
       dim <- dim(covariates_file_name)
       cat("Created covariate file from matrix for ",
           dim[1], " genes by ",
-          dim[2], " individuals at:\n", cov.file)
+          dim[2], " individuals at:\n", cov.file, "\n")
     }
     covariates_file_name <- cov.file
-  } else if (is.vector(covariates_file_name) && is.numeric(covariates_file_name)>0) {
+  } else if (is.vector(covariates_file_name) && is.numeric(covariates_file_name)) {
     cov.file <- paste0(prefix, "_covariate.txt")
     write.table(rbind(c("covid", paste0("sample", 1:length(covariates_file_name))),
                       c("cov1", covariates_file_name)),
-                row.names = F, col.names = T, quote = F, sep = "\t",
+                row.names = F, col.names = F, quote = F, sep = "\t",
                 file = cov.file)
     if(verbose){
       dim <- length(covariates_file_name)
       cat("Created covariate file for a single gene for", dim,
-          "individuals at:\n", cov.file)
+          "individuals at:\n", cov.file, "\n")
     }
     covariates_file_name <- cov.file
   } else if (length(covariates_file_name)==0) {
@@ -444,15 +471,13 @@ trans.qtl <- function(prefix,
   # Linear model to use, modelANOVA, modelLINEAR, or modelLINEAR_CROSS
   useModel = modelLINEAR; # modelANOVA, modelLINEAR, or modelLINEAR_CROSS
   
-  # Output file name
-  if (save.memory){
-    output_file_name = paste0(prefix, "_QTL_results.txt");
-  } else {
-    output_file_name = tempfile();
-  }
   
   # Only associations significant at this level will be saved
-  pvOutputThreshold = threshold;
+  if (compute.all) {
+    pvOutputThreshold = 1
+  } else {
+    pvOutputThreshold = threshold
+  }
   
   # Error covariance matrix
   # Set to numeric() for identity.
@@ -503,27 +528,45 @@ trans.qtl <- function(prefix,
     errorCovariance = errorCovariance, 
     verbose = verbose,
     pvalue.hist = TRUE,
-    min.pv.by.genesnp = FALSE,
-    noFDRsaveMemory = FALSE);
+    min.pv.by.genesnp = min.pv.by.genesnp,
+    noFDRsaveMemory = save.memory);
   
-  unlink(output_file_name);
+  if(save.memory & load.qtls){
+    # noFDRsaveMemory logical.
+    # Set noFDRsaveMemory = TRUE to save significant gene-SNP pairs directly to
+    # the output files, reduce memory footprint and skip FDR calculation.
+    # The eQTLs are not recorded in the returned object if noFDRsaveMemory = TRUE.
+    
+    # let's add them manually
+    cat("Read QTL_results from file\n", output_file_name, "\n")
+    me$all$eqtls <- data.frame(fread(output_file_name));
+    colnames(me$all$eqtls) <- c("snps", "gene", "beta", "statistic", "pvalue")
+  }
+  
+  if(!(compute.all |save.memory)){
+    unlink(output_file_name);
+  }
+
   
   ## Results:
   
   cat('Analysis of ', me$all$ntests, 'QTLs done in: ', me$time.in.sec, ' seconds', '\n');
   cat('Detected eQTLs: ', me$all$neqtls, '\n');
-  
-  me <- data.frame(me$all$eqtls, stringsAsFactors = F)
 
   if(is.data.frame(snp.pos)){
-    me <- merge(snp.pos, me,
+    me$all$eqtls <- merge(snp.pos, me$all$eqtls,
                 all.y=T)
-    me$chr <- as.character(me$chr)
-    me$gene <- as.character(me$gene)
+    me$all$eqtls$chr <- as.character(me$all$eqtls$chr)
+    me$all$eqtls$gene <- as.character(me$all$eqtls$gene)
     if(verbose){
       cat("SNP position annotation added to the QTL results.\n")
     }
   }
+  
+  if(what=="table" & min.pv.by.genesnp==FALSE){
+    me <- data.frame(me$all$eqtls, stringsAsFactors = F)
+  }
+  
   return(me)
 }
 
