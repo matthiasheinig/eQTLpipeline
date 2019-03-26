@@ -95,7 +95,7 @@ e.g. GWAS or metaboliteQTL and does not need gene annotations
 \seealso{
 Other eqtl functions: \code{\link{eqtl.min.p}},
   \code{\link{eqtl.run}}, \code{\link{eqtl}},
-  \code{\link{manhattan.qtl}}, \code{\link{myWaitForJobs}}
+  \code{\link{myWaitForJobs}}
 }
 \author{
 Ines Assum (2019-03-21)

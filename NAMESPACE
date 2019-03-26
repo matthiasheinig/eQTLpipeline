@@ -2,6 +2,7 @@
 
 export()
 export(add.chr.len.anno)
+export(convert.vcf)
 export(eqtl)
 export(eqtl.min.p)
 export(eqtl.run)

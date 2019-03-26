@@ -572,6 +572,62 @@ trans.qtl <- function(prefix,
 
 
 
+#' convenience function to convert genotypes from .vcf files to the MatrixEQTL format
+#'
+#' @family data conversion functions
+#' @title convert .vcf files to MatrixEQTL genotype input
+#' @param vcf.file vcf.file containing genotypes
+#' @param which which field of the .vcf file to use: "GT" = genotype,
+#'        "DS" = genotype dosage from MaCH/Thunder, "GL" = genotype likelihoods
+#'        (default "GT")
+#' @param map should the map object extracted from 
+#' @param snp.pos names for colums with annotations for custom build,
+#'        order: chromosome (chr), length (pos) (default NULL)
+#' @param genotype_file_name
+#' 
+#' @return either a matrix nsnps x nsample containing genotypes coded as 0,1,2
+#'         or a list with slots "gt.mat", "map", "snp.pos"
+#' @author Ines Assum (2019-03-21)
+#' @references
+#' @export
+convert.vcf <- function(vcf.file, which="GT", map=FALSE, snp.pos=FALSE, genotype_file_name=NULL){
+  require(VariantAnnotation)
+  require(dplyr)
+  
+  vcf <- readVcf(vcf.file)
+  if(map | snp.pos){
+    res <- list()
+    snpMat <- genotypeToSnpMatrix(vcf)
+    res[["gt.mat"]] <- t(as(snpMat$genotype, "numeric")) %>% as.data.frame
+    if(snp.pos){
+      snp.pos <- rowRanges(vcf)
+      res[["snp.pos"]] <- data.frame(snps=names(snp.pos),
+                                     chr=as.numeric(as.character(seqnames(snp.pos))),
+                                     pos=start(snp.pos),
+                                     stringsAsFactors = F)
+    }
+    if(map){
+      res[["map"]] <- snpMat$map
+    }
+    if(!is.null(genotype_file_name)){
+      write.table(cbind(snpid=rownames(res[["gt.mat"]]), res[["gt.mat"]]),
+                  row.names = F, col.names = T, quote = F, sep = "\t",
+                  file = genotype_file_name)
+      cat("Created genotype file from .vcf file at:\n", genotype_file_name, "\n")
+    }
+  } else {
+    res <- t(as(genotypeToSnpMatrix(vcf)$genotype, "numeric")) %>% as.data.frame
+    if(!is.null(genotype_file_name)){
+      write.table(cbind(snpid=rownames(res), res),
+                  row.names = F, col.names = T, quote = F, sep = "\t",
+                  file = genotype_file_name)
+      cat("Created genotype file from .vcf file at:\n", genotype_file_name, "\n")
+    }
+  }
+  return(res)
+}
+
+
 #' convenience function to get cumulative chromosome lengths for manhattan plots
 #'
 #' @family annotation functions
@@ -581,7 +637,13 @@ trans.qtl <- function(prefix,
 #' @param df data.frame containing custom annotations (default NULL)
 #' @param build.names names for colums with annotations for custom build,
 #'        order: chromosome (chr), length (pos) (default NULL)
-#' 
+#' "
+#' @return data frame with columns "chr", "chrLen", "cumSum2", "cumSum", "tick"
+#'         and one row for each chr value, in ascending order
+#'         chr = chromosome id, chrLen = length of the chromosome,
+#'         cumSum2 = cumulative sum of chromosome lengths, cumSum = cumulative
+#'         sum of chromosome lengths (starting at 0), tick = positions that
+#'         indicate the middle of each chromosome (for axis label)
 #' @author Ines Assum (2019-03-21)
 #' @references
 #' @export
@@ -621,7 +683,7 @@ add.chr.len.anno <- function(build="b37", df=NULL, build.names=NULL){
 
 #' convenience function to create ggplot2 manhattan plots of MatrixEQTL objects
 #'
-#' @family eqtl functions
+#' @family plot functions
 #' @title make manhattan plots of MatrixEQTL results
 #' @param me MatrixEQTL results as list or data.frame
 #' @param build genome build to use, options: "b37", "b38", "custom"
@@ -633,6 +695,7 @@ add.chr.len.anno <- function(build="b37", df=NULL, build.names=NULL){
 #' @param vcf vcf file to extract SNP annotations from (default NULL)
 #' @param trait character vector of gene/trait names to plot
 #' 
+#' @return ggplot2 object (list) with the plot
 #' @author Ines Assum (2019-03-21)
 #' @references
 #' @export

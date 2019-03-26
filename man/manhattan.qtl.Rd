@@ -23,15 +23,13 @@ colnames(snp.pos) <- c("snps", "chr", "pos")}
 \item{build.names}{names for colums with annotations for custom build,
 order: chr, length (default NULL)}
 }
+\value{
+ggplot2 object (list) with the plot
+}
 \description{
 convenience function to create ggplot2 manhattan plots of MatrixEQTL objects
-}
-\seealso{
-Other eqtl functions: \code{\link{eqtl.min.p}},
-  \code{\link{eqtl.run}}, \code{\link{eqtl}},
-  \code{\link{myWaitForJobs}}, \code{\link{trans.qtl}}
 }
 \author{
 Ines Assum (2019-03-21)
 }
-\concept{eqtl functions}
+\concept{plot functions}
