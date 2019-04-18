@@ -701,7 +701,9 @@ add.chr.len.anno <- function(build="b37", df=NULL, build.names=NULL){
 #' @export
 manhattan.qtl <- function(me, build="b37", snp.pos=NULL, trait=NULL, vcf=NULL, build.names=NULL) {
   require(ggplot2)
+  require(RColorBrewer)
   require(data.table)
+
 
   if (!is.data.frame(me)){
     me <- data.frame(me$all$eqtls,
@@ -722,7 +724,9 @@ manhattan.qtl <- function(me, build="b37", snp.pos=NULL, trait=NULL, vcf=NULL, b
   qtl.plot <- ggplot(me, aes(x=cumPos, y=-log10(pvalue), col = chr)) +
     geom_point() +
     theme_bw() +
-    scale_color_manual(values = rep(c("grey", "skyblue"), 22),
+    # scale_color_manual(values = rep(c("grey", "skyblue"), 22),
+    #                    guide=FALSE) +
+    scale_color_manual(values = rep(brewer.pal(n = 3, "Set2"), 22),
                        guide=FALSE) +
     scale_x_continuous(label = pos$chr, breaks = pos$tick)
   return(qtl.plot)
