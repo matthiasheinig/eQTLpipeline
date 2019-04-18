@@ -46,6 +46,7 @@ Basic interface to MatrixEQTL passing all data in files
 }
 \seealso{
 Other eqtl functions: \code{\link{eqtl.min.p}},
-  \code{\link{eqtl.run}}, \code{\link{myWaitForJobs}}
+  \code{\link{eqtl.run}}, \code{\link{myWaitForJobs}},
+  \code{\link{trans.qtl}}
 }
-
+\concept{eqtl functions}

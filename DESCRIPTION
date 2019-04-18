@@ -6,4 +6,4 @@ Description: A package to facilitate the full pipeline of cis eQTL analysis incl
 Depends: MatrixEQTL (>= 2.1.1), data.table, BatchJobs, R (>= 3.1)
 License: What license is it under?
 LazyData: true
-RoxygenNote: 5.0.0
+RoxygenNote: 6.1.1

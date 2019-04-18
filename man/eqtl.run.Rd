@@ -31,6 +31,7 @@ matrices, and genotypes as a file uses the \code{\link{eqtl}} function
 }
 \seealso{
 Other eqtl functions: \code{\link{eqtl.min.p}},
-  \code{\link{eqtl}}, \code{\link{myWaitForJobs}}
+  \code{\link{eqtl}}, \code{\link{myWaitForJobs}},
+  \code{\link{trans.qtl}}
 }
-
+\concept{eqtl functions}
